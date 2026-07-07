@@ -217,19 +217,19 @@
 
   <details class="card" id="exceptionCard">
     <summary style="cursor:pointer;font-weight:700;font-size:1rem;">🚫 최소성취수준 보장(최성보) 제외 학생 명단 <span id="excSummaryCount" style="color:var(--sub);font-weight:500;font-size:.85rem;"></span></summary>
-    <p class="card-sub" style="margin-top:12px;">여기에 등록된 학생이 아래 저성취 명단에 나타나면 <b>‘🚫 최성보 제외 학생’</b> 표시가 붙습니다. 한 줄에 한 명씩, <b>학년+반+번호(5자리)</b> 형식으로 적으세요. 이름·(특수학급/일반학급 등 메모)는 함께 적어도 되고 생략해도 됩니다.<br>예: <code>20828 이한음 (특수학급)</code></p>
+    <p class="card-sub" style="margin-top:12px;">여기에 등록된 학생이 아래 저성취 명단에 나타나면 <b>‘🚫 최성보 제외 학생’</b> 표시가 붙습니다. 한 줄에 한 명씩, <b>학년+반+번호(5자리)</b> 형식으로 적으세요. 이름은 함께 적어도 되고 생략해도 됩니다.<br>예: <code>20828 이한음</code></p>
     <textarea id="exceptionInput" class="exc-textarea" spellcheck="false">10306 김태우
 10409 김현수
 10514 신정안
 11036 김세린
 10636 김예훈
-20511 문지유 (일반학급)
-20517 소민주 (특수학급)
-20601 강민지 (특수학급)
-20618 오현서 (특수학급)
-20734 한지훈 (특수학급)
-20721 이예은 (일반학급)
-20828 이한음 (특수학급)</textarea>
+20511 문지유
+20517 소민주
+20601 강민지
+20618 오현서
+20734 한지훈
+20721 이예은
+20828 이한음</textarea>
     <div class="exc-count" id="excCount"></div>
   </details>
 
@@ -768,7 +768,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
           if(rec.__exc){
             const badge = document.createElement('span');
             badge.className = 'exc-badge';
-            badge.textContent = '🚫 최성보 제외 학생' + (rec.__exc.비고 ? ` (${rec.__exc.비고})` : '');
+            badge.textContent = '🚫 최성보 제외 학생';
             td.appendChild(badge);
           } else {
             td.textContent = '';
@@ -795,7 +795,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     const aoa = [headers];
     currentFiltered.forEach(rec=>{
       aoa.push(headers.map(h=>{
-        if(h==='비고') return rec.__exc ? ('최성보 제외 학생' + (rec.__exc.비고 ? ` (${rec.__exc.비고})` : '')) : '';
+        if(h==='비고') return rec.__exc ? '최성보 제외 학생' : '';
         if(h==='반영개수') return rec.반영개수 + '/' + uploadedFiles.length;
         const f = uploadedFiles.find(f=>f.label===h);
         if(f) return rec.perFile[f.id] !== undefined ? rec.perFile[f.id] : '';
