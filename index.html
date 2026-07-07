@@ -88,6 +88,20 @@
   }
   .controls .hint{font-size:.8rem; color:var(--sub);}
 
+  /* 최소성취수준 보장(최성보) 제외 학생 명단 입력 */
+  .exc-textarea{
+    width:100%; min-height:120px; resize:vertical;
+    border:1px solid var(--line); border-radius:8px; padding:10px 12px;
+    font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace; font-size:.85rem; line-height:1.5;
+  }
+  .exc-count{margin-top:8px; font-size:.83rem; color:var(--sub);}
+  .exc-badge{
+    display:inline-block; background:#fef2f2; color:#b91c1c; border:1px solid #fecaca;
+    border-radius:999px; padding:2px 9px; font-size:.78rem; font-weight:700; white-space:nowrap;
+  }
+  tr.exc-row{background:#fff7f7;}
+  tr.exc-row:hover{background:#fff0f0;}
+
   .msg{border-radius:10px; padding:14px 16px; font-size:.9rem; line-height:1.6; margin-bottom:16px; display:none;}
   .msg.show{display:block;}
   .msg.error{background:var(--red-bg); border:1px solid var(--red-border); color:var(--red);}
@@ -201,6 +215,24 @@
   <div id="msgIdentityInfo" class="msg info"></div>
   <div id="msgOkNone" class="msg ok"></div>
 
+  <details class="card" id="exceptionCard">
+    <summary style="cursor:pointer;font-weight:700;font-size:1rem;">🚫 최소성취수준 보장(최성보) 제외 학생 명단 <span id="excSummaryCount" style="color:var(--sub);font-weight:500;font-size:.85rem;"></span></summary>
+    <p class="card-sub" style="margin-top:12px;">여기에 등록된 학생이 아래 저성취 명단에 나타나면 <b>‘🚫 최성보 제외 학생’</b> 표시가 붙습니다. 한 줄에 한 명씩, <b>학년+반+번호(5자리)</b> 형식으로 적으세요. 이름·(특수학급/일반학급 등 메모)는 함께 적어도 되고 생략해도 됩니다.<br>예: <code>20828 이한음 (특수학급)</code></p>
+    <textarea id="exceptionInput" class="exc-textarea" spellcheck="false">10306 김태우
+10409 김현수
+10514 신정안
+11036 김세린
+10636 김예훈
+20511 문지유 (일반학급)
+20517 소민주 (특수학급)
+20601 강민지 (특수학급)
+20618 오현서 (특수학급)
+20734 한지훈 (특수학급)
+20721 이예은 (일반학급)
+20828 이한음 (특수학급)</textarea>
+    <div class="exc-count" id="excCount"></div>
+  </details>
+
   <div class="card" id="weightsCard" style="display:none;">
     <h2>⚖️ 평가별 반영점수 설정</h2>
     <p class="card-sub">자동으로 추정한 값입니다. 학교의 세부능력 반영 비율과 다르면 숫자를 직접 수정하세요. (예: 원점수 ÷ 인식된 만점 × 반영점수)</p>
@@ -282,10 +314,55 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
   const tableHead = document.getElementById('tableHead');
   const tableBody = document.getElementById('tableBody');
   const downloadBtn = document.getElementById('downloadBtn');
+  const exceptionInput = document.getElementById('exceptionInput');
+  const excCount = document.getElementById('excCount');
+  const excSummaryCount = document.getElementById('excSummaryCount');
 
   let uploadedFiles = [];    // [{id, name, sourceLabel, kind:'perf'|'written', label, maxScore, records, weight}]
   let identityFiles = [];    // 점수 없이 학번/성명만 제공하는 명부 파일들 [{name, records:[{반,번호,학번,성명}]}]
   let currentFiltered = [];  // 다운로드 대상 (현재 필터링된 결과)
+
+  // 최소성취수준 보장(최성보) 제외 학생 명단 텍스트를 파싱한다.
+  // 각 줄에서 '학년+반+번호(5자리)' 코드를 찾고(예: 20828 = 2학년 8반 28번), 같은 줄이나
+  // 다음 줄의 한글 이름·(메모)를 함께 묶는다. 코드만 있고 이름/메모가 다음 줄에 오는 형식도 지원.
+  function parseExceptions(text){
+    const list = [];
+    let cur = null;
+    (text || '').split(/\r?\n/).forEach(raw=>{
+      const line = raw.trim();
+      if(line === '') return;
+      const codeM = line.match(/(?:^|\D)(\d)(\d{2})(\d{2})(?:\D|$)/);
+      const noteM = line.match(/\(([^)]+)\)/);
+      const nameM = line.replace(/\d+/g,'').replace(/\([^)]*\)/g,'').match(/[가-힣]{2,5}/);
+      if(codeM){
+        cur = { 학년:Number(codeM[1]), 반:Number(codeM[2]), 번호:Number(codeM[3]), 성명:'', 비고:'' };
+        if(nameM) cur.성명 = nameM[0];
+        if(noteM) cur.비고 = noteM[1];
+        list.push(cur);
+      } else if(cur){
+        // 코드가 없는 줄: 직전 항목에 이름/메모를 보충 (여러 줄로 나뉜 형식 지원)
+        if(noteM) cur.비고 = noteM[1];
+        else if(nameM && !cur.성명) cur.성명 = nameM[0];
+      }
+    });
+    return list;
+  }
+
+  // 결과 학생(반/번호)이 제외 명단에 있는지 찾는다. 이름이 양쪽 다 있으면 이름까지 일치해야 함
+  // (학년이 다른 같은 반/번호 학생과의 혼동 방지).
+  function findException(rec, exceptions){
+    return exceptions.find(e =>
+      e.반 === rec.반 && e.번호 === rec.번호 &&
+      (!e.성명 || !rec.성명 || e.성명 === rec.성명)
+    ) || null;
+  }
+
+  function updateExcCount(){
+    const list = parseExceptions(exceptionInput ? exceptionInput.value : '');
+    if(excCount) excCount.textContent = `현재 ${list.length}명 등록됨`;
+    if(excSummaryCount) excSummaryCount.textContent = `(${list.length}명 등록됨)`;
+    return list;
+  }
 
   function cellToStr(v){
     return (v === null || v === undefined) ? '' : String(v);
@@ -663,9 +740,15 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     }
     msgOkNone.classList.remove('show');
 
-    countBadge.textContent = `⚠️ 합산 총점 ${validThreshold}점 이하 학생: 총 ${currentFiltered.length}명 (전체 ${combined.length}명 중)`;
+    const exceptions = updateExcCount();
+    // 각 학생에 제외 여부 표시를 붙인다.
+    currentFiltered.forEach(rec=>{ rec.__exc = findException(rec, exceptions); });
+    const excInList = currentFiltered.filter(r=>r.__exc).length;
 
-    const headers = ['반','번호','성명', ...uploadedFiles.map(f=>f.label), '총점','반영개수'];
+    countBadge.textContent = `⚠️ 합산 총점 ${validThreshold}점 이하 학생: 총 ${currentFiltered.length}명 (전체 ${combined.length}명 중)`
+      + (excInList > 0 ? ` · 이 중 최성보 제외 대상 ${excInList}명 포함` : '');
+
+    const headers = ['반','번호','성명', ...uploadedFiles.map(f=>f.label), '총점','반영개수','비고'];
     tableHead.innerHTML = '';
     headers.forEach(h=>{
       const th = document.createElement('th');
@@ -676,9 +759,19 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     tableBody.innerHTML = '';
     currentFiltered.forEach(rec=>{
       const tr = document.createElement('tr');
+      if(rec.__exc) tr.className = 'exc-row';
       headers.forEach(h=>{
         const td = document.createElement('td');
-        if(h==='반영개수'){
+        if(h==='비고'){
+          if(rec.__exc){
+            const badge = document.createElement('span');
+            badge.className = 'exc-badge';
+            badge.textContent = '🚫 최성보 제외 학생' + (rec.__exc.비고 ? ` (${rec.__exc.비고})` : '');
+            td.appendChild(badge);
+          } else {
+            td.textContent = '';
+          }
+        } else if(h==='반영개수'){
           td.textContent = rec.반영개수 + '/' + uploadedFiles.length;
         } else if(uploadedFiles.some(f=>f.label===h)){
           const f = uploadedFiles.find(f=>f.label===h);
@@ -696,10 +789,11 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
 
   function downloadExcel(){
     if(currentFiltered.length === 0) return;
-    const headers = ['반','번호','학번','성명', ...uploadedFiles.map(f=>f.label), '총점','반영개수'];
+    const headers = ['반','번호','학번','성명', ...uploadedFiles.map(f=>f.label), '총점','반영개수','비고'];
     const aoa = [headers];
     currentFiltered.forEach(rec=>{
       aoa.push(headers.map(h=>{
+        if(h==='비고') return rec.__exc ? ('최성보 제외 학생' + (rec.__exc.비고 ? ` (${rec.__exc.비고})` : '')) : '';
         if(h==='반영개수') return rec.반영개수 + '/' + uploadedFiles.length;
         const f = uploadedFiles.find(f=>f.label===h);
         if(f) return rec.perFile[f.id] !== undefined ? rec.perFile[f.id] : '';
@@ -811,6 +905,10 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
 
   thresholdInput.addEventListener('input', renderResults);
   downloadBtn.addEventListener('click', downloadExcel);
+  if(exceptionInput){
+    exceptionInput.addEventListener('input', ()=>{ updateExcCount(); renderResults(); });
+  }
+  updateExcCount(); // 최초 등록 인원수 표시
 
 })();
 </script>
