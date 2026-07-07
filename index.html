@@ -398,10 +398,12 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
   // - 수행평가 교과목별 일람표: "영   역 : 약물이...   영역만점 : 25.00" → 영역명(수행평가 항목명)
   // 둘 다 못 찾으면(예: 강의실별 일람표처럼 형식이 다른 경우) 전체 맥락 문자열을 그대로 사용한다.
   function extractShortSourceLabel(text){
-    let m = text.match(/고사\s*[:：]\s*(.+?)(?:\s{2,}\S+\s*[:：]|$)/);
+    // 각 원본 행은 ' · '로 이어붙여져 있으므로, 값 뒤에 다른 항목(교과목/만점 등)이나
+    // ' · ' 구분자가 나오면 거기서 끊는다.
+    let m = text.match(/고사\s*[:：]\s*(.+?)(?:\s{2,}\S+\s*[:：]|\s*·|$)/);
     if(m) return m[1].trim();
 
-    m = text.match(/영\s*역\s*[:：]\s*(.+?)(?:\s{2,}\S*만점\s*[:：]|$)/);
+    m = text.match(/영\s*역\s*[:：]\s*(.+?)(?:\s{2,}\S*만점\s*[:：]|\s*·|$)/);
     if(m) return m[1].trim();
 
     return text;
@@ -831,6 +833,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     uploadedFiles = [];
     identityFiles = [];
     const errors = [];
+    const parsedFiles = []; // 병합 전 파싱 결과 임시 저장
     let nextId = 0;
 
     for(const file of files){
@@ -850,13 +853,41 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
           identityFiles.push({ name: file.name, sourceLabel: result.sourceLabel, records: result.records });
           continue;
         }
-        uploadedFiles.push({
-          id: nextId++, name: file.name, sourceLabel: result.sourceLabel, contextFull: result.contextFull,
+        parsedFiles.push({
+          name: file.name, sourceLabel: result.sourceLabel, contextFull: result.contextFull,
           maxScore: result.maxScore, records: result.records,
         });
       }catch(err){
         errors.push(`${file.name}: 파일을 읽는 중 오류가 발생했습니다. 나이스에서 내려받은 엑셀 원본 파일이 맞는지 확인해 주세요. (${err && err.message ? err.message : err})`);
       }
+    }
+
+    // 같은 평가(고사/영역)를 강의실별로 나눠 받은 파일들을 하나로 합친다.
+    // 병합 기준: 출처명 + 만점이 같으면 동일 평가로 보고 학생 기록을 이어붙인다.
+    // (한 학생은 한 강의실에서만 응시하므로 반/번호 중복은 발생하지 않는다.)
+    const mergeGroups = new Map();
+    parsedFiles.forEach(p=>{
+      const key = p.sourceLabel + '||' + p.maxScore;
+      if(!mergeGroups.has(key)){
+        mergeGroups.set(key, {
+          id: nextId++, sourceLabel: p.sourceLabel, contextFull: p.contextFull,
+          maxScore: p.maxScore, records: [], names: [],
+        });
+      }
+      const g = mergeGroups.get(key);
+      g.records.push(...p.records);
+      g.names.push(p.name);
+    });
+    uploadedFiles = Array.from(mergeGroups.values());
+
+    const mergedCount = parsedFiles.length - uploadedFiles.length;
+    if(mergedCount > 0){
+      const mergedInfo = uploadedFiles
+        .filter(f=>f.names.length > 1)
+        .map(f=>`'${f.sourceLabel}' ${f.names.length}개 강의실`)
+        .join(', ');
+      msgIdentityInfo.innerHTML += `<div>🔗 같은 평가의 강의실별 파일을 자동으로 합쳤습니다: ${mergedInfo}.</div>`;
+      msgIdentityInfo.classList.add('show');
     }
 
     if(errors.length > 0){
@@ -867,7 +898,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     if(identityFiles.length > 0){
       const total = identityFiles.reduce((s,f)=>s+f.records.length, 0);
       const names = identityFiles.map(f=>f.name).join(', ');
-      msgIdentityInfo.innerHTML = `ℹ️ 학번/성명 명부로 인식된 파일 ${identityFiles.length}개(${names})에서 학생 ${total}명 정보를 확인했습니다. 반/번호가 일치하는 학생에게 자동으로 채워집니다.`;
+      msgIdentityInfo.innerHTML += `<div>ℹ️ 학번/성명 명부로 인식된 파일 ${identityFiles.length}개(${names})에서 학생 ${total}명 정보를 확인했습니다. 반/번호가 일치하는 학생에게 자동으로 채워집니다.</div>`;
       msgIdentityInfo.classList.add('show');
     }
 
