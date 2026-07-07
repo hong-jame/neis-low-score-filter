@@ -339,7 +339,10 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     }
 
     const norm = h => h.replace(/\s+/g,'');
-    const scoreHeader = headers.find(h=>norm(h)==='원점수') || headers.find(h=>norm(h)==='합계');
+    // 점수 열 이름은 양식마다 다르다: '원점수'(수행평가 강의실별), '점수'(정기시험 학생별 명단), '합계'(합산형)
+    const scoreHeader = headers.find(h=>norm(h)==='원점수')
+      || headers.find(h=>norm(h)==='점수')
+      || headers.find(h=>norm(h)==='합계');
     if(!scoreHeader){
       return { ok:false, headers };
     }
@@ -357,8 +360,10 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
 
     const records = [];
     rows.forEach(rec=>{
-      const scoreVal = Number(cellToStr(rec[scoreHeader]).trim());
-      if(!Number.isFinite(scoreVal)) return; // 결시 등 숫자로 변환 안 되면 제외
+      const rawScore = cellToStr(rec[scoreHeader]).trim();
+      if(rawScore === '') return; // 점수 빈칸(자퇴/전출/결시 등)은 0점이 아니라 대상에서 제외
+      const scoreVal = Number(rawScore);
+      if(!Number.isFinite(scoreVal)) return; // 그 외 숫자로 변환 안 되는 값도 제외
 
       let ban = '', beonho = '';
       if(banIdx!==-1){
