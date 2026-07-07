@@ -262,7 +262,7 @@
     <button class="btn" id="downloadBtn">📥 결과 엑셀 파일 다운로드</button>
   </div>
 
-  <div class="footer-note">브라우저 오프라인 처리 · SheetJS 내장 · 서버 전송 없음</div>
+  <div class="footer-note">브라우저 오프라인 처리 · SheetJS 내장 · 서버 전송 없음 · <b>버전 2026-07-08 (v8: 강의실 병합·수행 중복제거)</b></div>
 </div>
 
 <script>
@@ -857,7 +857,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
         }
         parsedFiles.push({
           name: file.name, sourceLabel: result.sourceLabel, contextFull: result.contextFull,
-          maxScore: result.maxScore, records: result.records,
+          ledgerType: result.ledgerType, maxScore: result.maxScore, records: result.records,
         });
       }catch(err){
         errors.push(`${file.name}: 파일을 읽는 중 오류가 발생했습니다. 나이스에서 내려받은 엑셀 원본 파일이 맞는지 확인해 주세요. (${err && err.message ? err.message : err})`);
