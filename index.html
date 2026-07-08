@@ -249,6 +249,10 @@
       <input type="number" id="thresholdInput" value="40" min="0" max="100" step="1">
       <span class="hint">이하인 학생을 추출합니다</span>
     </div>
+    <div class="controls">
+      <label style="font-weight:500;"><input type="checkbox" id="completeOnly" style="vertical-align:middle;margin-right:6px;">모든 평가가 반영된 학생만 표시 <span class="hint">(일부 평가 파일이 빠진 학생 제외 — 미완성 데이터로 인한 오탐 방지)</span></label>
+    </div>
+    <div id="coverageWarn" class="msg warn" style="margin-top:12px;"></div>
   </div>
 
   <div class="card" id="resultCard" style="display:none;">
@@ -262,7 +266,7 @@
     <button class="btn" id="downloadBtn">📥 결과 엑셀 파일 다운로드</button>
   </div>
 
-  <div class="footer-note">브라우저 오프라인 처리 · SheetJS 내장 · 서버 전송 없음 · <b>버전 2026-07-08 (v8: 강의실 병합·수행 중복제거)</b></div>
+  <div class="footer-note">브라우저 오프라인 처리 · SheetJS 내장 · 서버 전송 없음 · <b>버전 2026-07-08 (v9: 평가 커버리지 경고·완전반영 필터)</b></div>
 </div>
 
 <script>
@@ -301,6 +305,8 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
   const fileInput = document.getElementById('fileInput');
   const fileListEl = document.getElementById('fileList');
   const thresholdInput = document.getElementById('thresholdInput');
+  const completeOnly = document.getElementById('completeOnly');
+  const coverageWarn = document.getElementById('coverageWarn');
 
   const msgError = document.getElementById('msgError');
   const msgWarnFiles = document.getElementById('msgWarnFiles');
@@ -731,9 +737,30 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     const combined = computeCombined();
     const threshold = Number(thresholdInput.value);
     const validThreshold = Number.isFinite(threshold) ? threshold : 40;
+    const totalEval = uploadedFiles.length;
 
+    // 평가별 커버리지(각 평가에 점수가 있는 학생 수)를 계산해, 일부 평가만 반영된 학생이 있으면
+    // 어느 평가가 몇 명 누락됐는지 안내한다. (예: 다른 강의실 수행평가 파일을 안 올린 경우)
+    const incompleteCount = combined.filter(r => r.반영개수 < totalEval).length;
+    coverageWarn.classList.remove('show');
+    coverageWarn.innerHTML = '';
+    if(incompleteCount > 0){
+      const coverage = uploadedFiles.map(f=>{
+        const n = combined.filter(r => r.perFile[f.id] !== undefined).length;
+        return { label: f.label, n, missing: combined.length - n };
+      });
+      const lacking = coverage.filter(c => c.missing > 0);
+      coverageWarn.innerHTML =
+        `⚠️ <b>일부 학생은 평가 점수가 일부 빠진 채 총점이 계산되었습니다.</b> (전체 ${combined.length}명 중 ${incompleteCount}명이 미완성)<br>` +
+        lacking.map(c=>`• <b>${c.label}</b>: ${c.n}명만 반영됨 (${c.missing}명 누락)`).join('<br>') +
+        `<br><span style="font-weight:400;">→ 빠진 강의실의 해당 평가 파일을 추가로 올리거나, 아래 <b>‘모든 평가가 반영된 학생만 표시’</b>를 체크하세요. (미완성 학생은 총점이 낮게 나와 잘못 포함될 수 있습니다.)</span>`;
+      coverageWarn.classList.add('show');
+    }
+
+    const onlyComplete = completeOnly && completeOnly.checked;
     currentFiltered = combined
       .filter(r => r.총점 <= validThreshold)
+      .filter(r => !onlyComplete || r.반영개수 === totalEval)
       .sort((a,b) => a.총점 - b.총점);
 
     if(currentFiltered.length === 0){
@@ -750,6 +777,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
     const excInList = currentFiltered.filter(r=>r.__exc).length;
 
     countBadge.textContent = `⚠️ 합산 총점 ${validThreshold}점 이하 학생: 총 ${currentFiltered.length}명 (전체 ${combined.length}명 중)`
+      + (onlyComplete ? ` · 모든 평가 반영 학생만 표시 중` : '')
       + (excInList > 0 ? ` · 이 중 최성보 제외 대상 ${excInList}명 포함` : '');
 
     const headers = ['반','번호','성명', ...uploadedFiles.map(f=>f.label), '총점','반영개수','비고'];
@@ -950,6 +978,7 @@ w[f]=1}i[b]=f;}}for(g=l.s.r+n;g<=l.e.r;++g){if((T[g]||{}).hidden)continue;var A=
 
   thresholdInput.addEventListener('input', renderResults);
   downloadBtn.addEventListener('click', downloadExcel);
+  if(completeOnly){ completeOnly.addEventListener('change', renderResults); }
   if(exceptionInput){
     exceptionInput.addEventListener('input', ()=>{ updateExcCount(); renderResults(); });
   }
